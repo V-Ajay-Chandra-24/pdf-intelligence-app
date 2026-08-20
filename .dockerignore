@@ -1,0 +1,36 @@
+# Dependencies (reinstalled inside Docker via npm ci)
+node_modules
+
+# Next.js build output
+.next
+
+# Git
+.git
+.gitignore
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Local env files (injected via docker-compose environment)
+.env
+.env.local
+.env.*.local
+
+# Editor & OS artifacts
+.DS_Store
+*.log
+npm-debug.log*
+
+# Tests
+__tests__
+*.test.ts
+*.spec.ts
+
+# IDE
+.vscode
+.idea
+
+# Temporary uploads (mounted as a volume)
+public/uploads
