@@ -2,8 +2,8 @@
 
 An AI-powered PDF workspace where users can upload documents, get automatic AI-generated summaries, chat with their PDFs using natural language, and collaborate with others through secure sharing and threaded comments.
 
-**Live app:** [https://pdf-intelligence-app-production.up.railway.app/]
-**Video walkthrough:** [https://www.loom.com/share/f3d0459c930c453b88b82018ef0b85d5]
+**Live app:** https://pdf-intelligence-app-production.up.railway.app/
+**Video walkthrough:** https://www.loom.com/share/f3d0459c930c453b88b82018ef0b85d5
 
 ---
 
