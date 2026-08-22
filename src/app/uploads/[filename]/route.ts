@@ -42,7 +42,8 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const filePath = path.join(process.cwd(), "public", "uploads", filename);
+    const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "public", "uploads");
+    const filePath = path.join(uploadsDir, filename);
 
     try {
       const fileBuffer = await fs.readFile(filePath);

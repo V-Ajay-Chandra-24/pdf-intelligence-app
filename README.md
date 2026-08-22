@@ -183,5 +183,6 @@ To deploy your own instance:
 1. Push the repo to GitHub.
 2. Create a new Railway project from the GitHub repo — Railway will build from the included `Dockerfile` automatically.
 3. Add all environment variables listed above in Railway's Variables tab.
-4. Generate a public domain under Settings → Networking, then set `NEXTAUTH_URL` to that domain and redeploy.
-5. Add the deployed domain to your Google OAuth client's Authorized JavaScript origins and Authorized redirect URIs (`https://your-domain/api/auth/callback/google`).
+4. Add a Persistent Volume in Railway: under the service's Settings → Volumes, add a volume and mount it at `/data/uploads`. Then, in the Variables tab, set `UPLOADS_DIR=/data/uploads`. If you don't do this, all uploaded PDFs will be lost every time the app redeploys!
+5. Generate a public domain under Settings → Networking, then set `NEXTAUTH_URL` to that domain and redeploy.
+6. Add the deployed domain to your Google OAuth client's Authorized JavaScript origins and Authorized redirect URIs (`https://your-domain/api/auth/callback/google`).

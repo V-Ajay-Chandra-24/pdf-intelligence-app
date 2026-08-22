@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     const filename = `${uuid}.pdf`;
 
     // Ensure uploads directory exists
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "public", "uploads");
     await fs.mkdir(uploadsDir, { recursive: true });
 
     const filePath = path.join(uploadsDir, filename);
