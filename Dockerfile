@@ -59,13 +59,24 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./
 # Copy generated prisma client
 COPY --from=builder --chown=nextjs:nodejs /app/src/generated/prisma ./src/generated/prisma
 
-USER nextjs
+# Install su-exec for privilege drop in entrypoint
+RUN apk add --no-cache su-exec
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# We DO NOT use `USER nextjs` here because the entrypoint needs root access
+# to chown the mounted volume. Privileges are dropped to `nextjs` via su-exec in the entrypoint.
 
 EXPOSE 3000
 
 ENV PORT 3000
 # set hostname to localhost
 ENV HOSTNAME "0.0.0.0"
+
+# Use the entrypoint to handle permissions before starting
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Automatically start the Next.js server
 CMD ["node", "server.js"]
