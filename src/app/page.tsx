@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, MessageSquare, Share2, Users, Sparkles } from "lucide-react";
+import { FileText, MessageSquare, Share2, Users } from "lucide-react";
 import LandingNavbar from "@/components/LandingNavbar";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
@@ -146,18 +146,19 @@ export default async function LandingPage() {
             <span className="text-sm font-medium text-neutral-500">PDF Intelligence</span>
           </div>
           <p className="text-sm text-neutral-500">
-            &copy; {new Date().getFullYear()} PDF Intelligence. All rights reserved.
+            Built by V Ajay Chandra &middot; {new Date().getFullYear()}
           </p>
           <div className="flex gap-5">
-            <a href="#" className="text-sm text-neutral-500 transition-colors hover:text-neutral-300">
-              Privacy Policy
-            </a>
-            <a href="#" className="text-sm text-neutral-500 transition-colors hover:text-neutral-300">
-              Terms of Service
+            <a href="https://github.com/V-Ajay-Chandra-24/pdf-intelligence-app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-neutral-500 transition-colors hover:text-neutral-300"
+            >
+              Source on GitHub
             </a>
           </div>
         </div>
-      </footer>
-    </div>
+      </footer >
+    </div >
   );
 }
