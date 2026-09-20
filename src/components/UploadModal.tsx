@@ -45,8 +45,8 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
       return;
     }
 
-    if (selected.size > 20 * 1024 * 1024) {
-      setError("File size exceeds 20MB limit.");
+    if (selected.size > 10 * 1024 * 1024) {
+      setError("File size exceeds 10MB limit.");
       return;
     }
 
@@ -163,7 +163,7 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
           {stage === "IDLE" && (
             <>
               <p className="text-sm text-neutral-400 mb-5">
-                Upload a standard or scanned PDF. We automatically extract text using digital parsing or OCR fallback.
+                Upload a PDF with selectable text (up to 10MB). Scanned or image-only PDFs aren't supported.
               </p>
 
               {/* Upload Dropzone */}
@@ -185,7 +185,7 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
                   {file ? file.name : "Click or drag file to this area"}
                 </h3>
                 <p className="mt-1.5 text-xs text-neutral-400">
-                  {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Strictly PDF up to 20MB"}
+                  {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Strictly PDF up to 10MB"}
                 </p>
               </div>
 
@@ -228,7 +228,7 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
               <Loader2 className="w-10 h-10 text-neutral-400 mb-4 animate-spin" />
               <h3 className="text-sm font-medium text-white mb-2">Processing Document</h3>
               <p className="text-sm text-neutral-500">
-                Extracting digital text. If no text is found, we will perform an OCR fallback pass...
+                Extracting text and preparing your document...
               </p>
             </div>
           )}
