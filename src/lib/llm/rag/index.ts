@@ -49,23 +49,24 @@ export async function setupDocumentRAG(documentId: string, text: string): Promis
     where: { documentId },
   });
 
-  if (existingChunks > 0) return; // Already processed
-
   const chunks = chunkText(text);
+  if (existingChunks >= chunks.length) return; // Already processed
 
   // We embed and insert chunks one by one or in batches to avoid overloading Ollama
-  for (let i = 0; i < chunks.length; i++) {
+  for (let i = existingChunks; i < chunks.length; i++) {
     const content = chunks[i];
     try {
       const embedding = await embedText(content);
+      const vec = `[${embedding.join(",")}]`;
       
       // We must use $executeRaw because Prisma Client doesn't support writing to Unsupported vector columns directly
       await prisma.$executeRaw`
         INSERT INTO "DocumentChunk" ("id", "documentId", "chunkIndex", "content", "embedding")
-        VALUES (gen_random_uuid(), ${documentId}, ${i}, ${content}, ${embedding}::vector)
+        VALUES (gen_random_uuid(), ${documentId}, ${i}, ${content}, ${vec}::vector)
       `;
     } catch (e) {
       console.error(`Failed to embed chunk ${i} for document ${documentId}`, e);
+      throw e; // Bubble up to stop the loop and let chat route handle it
     }
   }
 }
@@ -73,6 +74,7 @@ export async function setupDocumentRAG(documentId: string, text: string): Promis
 // Retrieves the most relevant context for a question
 export async function retrieveContext(documentId: string, question: string): Promise<string> {
   const questionEmbedding = await embedText(question);
+  const vec = `[${questionEmbedding.join(",")}]`;
 
   // Cosine similarity search using pgvector (<=>)
   // Ordered by distance, closest first
@@ -80,7 +82,7 @@ export async function retrieveContext(documentId: string, question: string): Pro
     SELECT content
     FROM "DocumentChunk"
     WHERE "documentId" = ${documentId}
-    ORDER BY embedding <=> ${questionEmbedding}::vector
+    ORDER BY embedding <=> ${vec}::vector
     LIMIT 6
   `;
 

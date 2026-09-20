@@ -222,10 +222,11 @@ ${contextText}`;
 
   } catch (error: any) {
     console.error("Chat API error:", error);
-    if (error.message && error.message.includes("429")) {
+    const isRateLimit = error?.status === 429 || (error?.message && (error.message.includes("429") && error.message.includes("RESOURCE_EXHAUSTED")));
+    if (isRateLimit) {
       return Response.json({ message: "Rate limit reached — please wait a moment and try again." }, { status: 429 });
     }
-    return Response.json({ message: "Internal server error" }, { status: 500 });
+    return Response.json({ message: "Something went wrong while preparing this document. Please try again." }, { status: 500 });
   }
 }
 

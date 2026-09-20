@@ -36,7 +36,7 @@ Because a PDF's full text can exceed a model's context window, the app uses two 
 - **RAG mode** (for documents exceeding the threshold): the text is chunked (~500–800 tokens per chunk, ~100 token overlap), embedded, and stored in Postgres using the `pgvector` extension. Each chat question is embedded and compared against stored chunks using cosine similarity (`embedding <=> query`), and only the top-matching chunks are used as context. Retrieval is always scoped to a single `documentId`, so chunks from one document can never leak into another document's chat.
 
 **Text extraction**
-PDF text is extracted using `unpdf` (built on PDF.js). For densely tabular documents (receipts, mark sheets, forms), extraction uses positional (x/y) text data to reconstruct rows, rather than relying on flattened text order — this avoids a failure mode where labels and values become mismatched when a table is read out of visual order. Scanned images are currently rejected during the Vercel migration to fit within serverless resource constraints.
+PDF text is extracted using `unpdf` (built on PDF.js). For densely tabular documents (receipts, mark sheets, forms), extraction uses positional (x/y) text data to reconstruct rows, rather than relying on flattened text order — this avoids a failure mode where labels and values become mismatched when a table is read out of visual order. Scanned or image-only PDFs are rejected with a clear message (no OCR), which keeps the app compatible with serverless hosting.
 
 **Multi-provider LLM support**
 The app supports both Google Gemini and a local Ollama instance as interchangeable LLM providers, selected via the `LLM_PROVIDER` environment variable, behind a shared provider interface (`summarize()`, `chat()`).
