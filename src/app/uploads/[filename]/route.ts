@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { deriveBlobPathname, getPdfStream } from "@/lib/storage";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: Request,
@@ -23,43 +24,52 @@ export async function GET(
     const fileUrl = `/uploads/${filename}`;
     
     let isAuthorized = false;
+    let authorizedDocument = null;
 
     if (session?.user?.id) {
       const document = await prisma.document.findFirst({
         where: { fileUrl, userId: session.user.id }
       });
-      if (document) isAuthorized = true;
+      if (document) {
+        isAuthorized = true;
+        authorizedDocument = document;
+      }
     }
 
     if (!isAuthorized && shareToken) {
       const share = await prisma.share.findFirst({
-        where: { token: shareToken, revokedAt: null, document: { fileUrl } }
+        where: { token: shareToken, revokedAt: null, document: { fileUrl } },
+        include: { document: true }
       });
-      if (share) isAuthorized = true;
+      if (share && share.document) {
+        isAuthorized = true;
+        authorizedDocument = share.document;
+      }
     }
 
-    if (!isAuthorized) {
+    if (!isAuthorized || !authorizedDocument) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "public", "uploads");
-    const filePath = path.join(uploadsDir, filename);
+    const uuid = filename.replace(".pdf", "");
+    const blobPathname = deriveBlobPathname(authorizedDocument.userId, uuid);
 
-    try {
-      const fileBuffer = await fs.readFile(filePath);
-      
-      return new NextResponse(fileBuffer, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `inline; filename="${filename}"`,
-          "Cache-Control": "public, max-age=31536000, immutable",
-        },
-      });
-    } catch (err) {
-      console.error(`File not found: ${filePath}`, err);
+    const result = await getPdfStream(blobPathname);
+    
+    if (!result || !result.stream) {
       return new NextResponse("File not found", { status: 404 });
     }
+    
+    return new NextResponse(result.stream as any, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${authorizedDocument.filename}"`,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+      },
+    });
+
   } catch (error) {
     console.error("Error serving file:", error);
     return new NextResponse("Internal Server Error", { status: 500 });

@@ -4,6 +4,8 @@ import { setupDocumentRAG, retrieveContext } from "@/lib/llm/rag";
 import { llm } from "@/lib/llm";
 import { verifyDocumentAccess } from "@/lib/access";
 
+export const maxDuration = 300;
+
 // Simple in-memory rate limiter: { token: { count, resetAt } }
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 5; // 5 messages

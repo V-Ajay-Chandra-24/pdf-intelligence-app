@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { UploadCloud, CheckCircle, AlertCircle, Loader2, X } from "lucide-react";
+import { upload } from "@vercel/blob/client";
+import { useSession } from "next-auth/react";
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -17,7 +19,8 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const { data: session } = useSession();
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -26,9 +29,9 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
       setStage("IDLE");
       setProgress(0);
       setError(null);
-      if (xhrRef.current) {
-        xhrRef.current.abort();
-        xhrRef.current = null;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
     }
   }, [isOpen]);
@@ -59,67 +62,76 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
     validateAndSetFile(e.dataTransfer.files?.[0]);
   };
 
-  const handleUpload = () => {
-    if (!file) return;
+  const handleUpload = async () => {
+    if (!file || !session?.user?.id) {
+      if (!session?.user?.id) setError("Authentication required");
+      return;
+    }
 
     setStage("UPLOADING");
     setError(null);
     setProgress(0);
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-    const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
+    try {
+      // 1. Generate UUID for the blob
+      const uuid = crypto.randomUUID();
+      const pathname = `pdfs/${session.user.id}/${uuid}.pdf`;
 
-    xhr.open("POST", "/api/upload", true);
+      // 2. Upload to Vercel Blob
+      await upload(pathname, file, {
+        access: "private",
+        handleUploadUrl: "/api/upload/token",
+        abortSignal: abortController.signal,
+        onUploadProgress: (event) => {
+          setProgress(event.percentage);
+        },
+      });
 
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        const percentComplete = (event.loaded / event.total) * 100;
-        setProgress(percentComplete);
-      }
-    };
-
-    xhr.upload.onload = () => {
-      // Upload is complete, now wait for the server response (extraction)
       setStage("EXTRACTING");
-    };
 
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === XMLHttpRequest.DONE) {
-        xhrRef.current = null;
-        if (xhr.status === 200) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            setStage("DONE");
-            setTimeout(() => {
-              onUploadComplete(data.document);
-            }, 1000); // Wait 1s to show success state before closing
-          } catch (e) {
-            setError("Invalid server response");
-            setStage("IDLE");
-          }
-        } else if (xhr.status !== 0) {
-          // status 0 means aborted by user
-          try {
-            const data = JSON.parse(xhr.responseText);
-            setError(data.message || "Failed to upload file");
-          } catch (e) {
-            setError("Failed to upload file");
-          }
-          setStage("IDLE");
-        }
+      // 3. Post to our backend to create the Document and start processing
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uuid,
+          originalName: file.name,
+          size: file.size,
+        }),
+        signal: abortController.signal,
+      });
+
+      abortControllerRef.current = null;
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to process document");
       }
-    };
 
-    xhr.send(formData);
+      const data = await response.json();
+      setStage("DONE");
+      setTimeout(() => {
+        onUploadComplete(data.document);
+      }, 1000); // Wait 1s to show success state before closing
+
+    } catch (err: any) {
+      abortControllerRef.current = null;
+      if (err.name === "AbortError") {
+        setError("Upload cancelled by user.");
+      } else {
+        setError(err.message || "Something went wrong during upload");
+      }
+      setStage("IDLE");
+    }
   };
 
   const handleCancel = () => {
-    if (xhrRef.current) {
-      xhrRef.current.abort();
-      xhrRef.current = null;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     setStage("IDLE");
     setProgress(0);

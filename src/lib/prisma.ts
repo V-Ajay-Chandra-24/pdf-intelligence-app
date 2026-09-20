@@ -10,7 +10,7 @@ declare global {
 }
 
 // Ensure pool is only created once in development
-const pool = global.pool || new Pool({ connectionString });
+const pool = global.pool || new Pool({ connectionString, max: 5 });
 if (process.env.NODE_ENV !== 'production') global.pool = pool;
 
 const adapter = new PrismaPg(pool);

@@ -2,7 +2,7 @@
 
 An AI-powered PDF workspace where users can upload documents, get automatic AI-generated summaries, chat with their PDFs using natural language, and collaborate with others through secure sharing and threaded comments.
 
-**Live app:** https://pdf-intelligence-app-production.up.railway.app/
+**Live app:** https://pdf-intelligence.vercel.app/ (Example)
 
 **Video walkthrough:** https://www.loom.com/share/f3d0459c930c453b88b82018ef0b85d5
 
@@ -24,7 +24,7 @@ An AI-powered PDF workspace where users can upload documents, get automatic AI-g
 ### AI capabilities in detail
 
 **Summarization**
-On upload, extracted text is sent to the configured LLM with a system prompt constrained to 3–5 sentences of concrete, specific content (names, dates, figures) rather than generic restatement ("this document is about..."). A server-side safety net strips any leftover preamble the model might still produce.
+On upload, extracted text is sent to the configured LLM with a system prompt constrained to 3–5 sentences of concrete, specific content (names, dates, figures) rather than generic restatement ("this document is about..."). A server-side safety net strips any leftover preamble the model might still produce. Summarization runs in the background using Next.js `after()`.
 
 **Chat**
 The chat interface streams responses token-by-token and keeps the last 5 conversation turns (10 messages) per participant, persisted server-side so history survives a page refresh. Answers are grounded — the model is instructed to say "I couldn't find that in the document" rather than guess when an answer isn't present in the given context.
@@ -33,15 +33,13 @@ The chat interface streams responses token-by-token and keeps the last 5 convers
 Because a PDF's full text can exceed a model's context window, the app uses two strategies depending on document length, switched automatically based on an estimated token count:
 
 - **Full-context mode** (default for most documents): the entire extracted text is passed directly in the prompt. This gives the model perfect global context and avoids retrieval misses. The token threshold for this mode is configurable per LLM provider, since context window sizes differ significantly between providers.
-- **RAG mode** (for documents exceeding the threshold): the text is chunked (~500–800 tokens per chunk, ~100 token overlap), embedded, and stored in Postgres using the `pgvector` extension. Each chat question is embedded and compared against stored chunks using cosine similarity (`embedding <=> query`), and only the top-matching chunks are used as context. Retrieval is always scoped to a single `documentId`, so chunks from one document can never leak into another document's chat — this was verified by testing cross-document questions to confirm no answer bleed-through.
-
-This hybrid approach was chosen over pure full-context (which doesn't scale to very large documents) or pure RAG (which can miss relevant details on shorter documents where full context would be strictly better and cheaper).
+- **RAG mode** (for documents exceeding the threshold): the text is chunked (~500–800 tokens per chunk, ~100 token overlap), embedded, and stored in Postgres using the `pgvector` extension. Each chat question is embedded and compared against stored chunks using cosine similarity (`embedding <=> query`), and only the top-matching chunks are used as context. Retrieval is always scoped to a single `documentId`, so chunks from one document can never leak into another document's chat.
 
 **Text extraction**
-PDF text is extracted using `unpdf` (built on PDF.js). For densely tabular documents (receipts, mark sheets, forms), extraction uses positional (x/y) text data to reconstruct rows, rather than relying on flattened text order — this avoids a failure mode where labels and values become mismatched when a table is read out of visual order. An OCR fallback handles scanned/image-based PDFs that have no extractable text layer.
+PDF text is extracted using `unpdf` (built on PDF.js). For densely tabular documents (receipts, mark sheets, forms), extraction uses positional (x/y) text data to reconstruct rows, rather than relying on flattened text order — this avoids a failure mode where labels and values become mismatched when a table is read out of visual order. Scanned images are currently rejected during the Vercel migration to fit within serverless resource constraints.
 
 **Multi-provider LLM support**
-The app supports both Google Gemini and a local Ollama instance as interchangeable LLM providers, selected via the `LLM_PROVIDER` environment variable, behind a shared provider interface (`summarize()`, `chat()`). This made it possible to develop and test entirely offline with a local model before switching to Gemini for deployment, without changing any calling code.
+The app supports both Google Gemini and a local Ollama instance as interchangeable LLM providers, selected via the `LLM_PROVIDER` environment variable, behind a shared provider interface (`summarize()`, `chat()`).
 
 ---
 
@@ -53,21 +51,24 @@ The app supports both Google Gemini and a local Ollama instance as interchangeab
 | Database | PostgreSQL (via [Neon](https://neon.tech)) |
 | ORM | Prisma |
 | Vector search | `pgvector` extension |
+| Storage | Vercel Blob |
 | Auth | NextAuth (credentials + Google OAuth) |
 | LLM (production) | Google Gemini (`gemini-3.6-flash` for chat/summarization, `gemini-embedding-001` for embeddings) |
 | LLM (local/offline) | Ollama (`gemma3:4b` + `nomic-embed-text`) |
 | PDF text extraction | `unpdf` (PDF.js) with positional-text table handling |
-| Deployment | [Railway](https://railway.app) |
+| Deployment | [Vercel](https://vercel.com) |
 | Styling | Tailwind CSS |
 
 ---
 
 ## Architecture notes
 
-- **Provider abstraction:** `lib/llm/index.ts` exposes a single interface regardless of which LLM backend is active, selected at request time via `LLM_PROVIDER`. This avoids caching the provider choice at module load, which previously caused the app to silently keep using Ollama even after switching to Gemini — the fix was to resolve the provider dynamically on every call rather than once at startup.
+- **Serverless Migration:** The application has been fully migrated to Vercel Hobby (Serverless). Local disk uploads have been replaced with **Vercel Blob** for persistent file storage. Background tasks use Next.js `after()`.
+- **Blob File Security:** Files are uploaded to Vercel Blob with `access: "private"`. Only the authorized user or a user with a valid share token can access the PDF through the secure proxy route (`/api/uploads/[filename]`).
+- **Provider abstraction:** `lib/llm/index.ts` exposes a single interface regardless of which LLM backend is active, selected at request time via `LLM_PROVIDER`.
 - **RAG isolation:** every `DocumentChunk` row is tagged with its `documentId`, and every similarity search filters by `documentId` before ranking by vector distance, so retrieval is always scoped to a single document.
-- **Chat history isolation:** chat messages are scoped by both `documentId` and a `participantKey` (the authenticated user's ID, or a persistent per-guest session ID), so the document owner and every individual guest each have their own private conversation with the AI — no cross-visibility between different viewers of the same shared document.
-- **Share links:** generated using a cryptographically random token (not a sequential or guessable ID), and can be revoked at any time by the owner. Revocation is enforced server-side on every request (document access, chat, comments), not just at the initial page load.
+- **Chat history isolation:** chat messages are scoped by both `documentId` and a `participantKey`.
+- **Share links:** generated using a cryptographically random token. Revocation is enforced server-side on every request (document access, chat, comments).
 
 ---
 
@@ -87,6 +88,9 @@ NEXTAUTH_SECRET="generate with: openssl rand -base64 32"
 GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET="your-client-secret"
 
+# Vercel Blob (for file storage)
+BLOB_READ_WRITE_TOKEN="your-vercel-blob-read-write-token"
+
 # LLM provider toggle — "gemini" or "ollama"
 LLM_PROVIDER="gemini"
 
@@ -105,8 +109,7 @@ FULL_CONTEXT_TOKEN_THRESHOLD_GEMINI="800000"
 ```
 
 **Security notes:**
-- `GEMINI_API_KEY`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, and `DATABASE_URL` must never be committed to the repository or exposed to client-side code. `.env` is listed in `.gitignore`.
-- If you're setting up billing on the Gemini API project for higher rate limits, note that enabling billing removes that project's free-tier allowance entirely going forward.
+- `GEMINI_API_KEY`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, `DATABASE_URL`, and `BLOB_READ_WRITE_TOKEN` must never be committed to the repository or exposed to client-side code. `.env` is listed in `.gitignore`.
 
 ---
 
@@ -114,8 +117,9 @@ FULL_CONTEXT_TOKEN_THRESHOLD_GEMINI="800000"
 
 ### Prerequisites
 - Node.js 20+
-- A PostgreSQL database with the `pgvector` extension available (a free [Neon](https://neon.tech) project works well, or run Postgres locally/via Docker)
-- A [Google Gemini API key](https://aistudio.google.com/apikey) (or a local [Ollama](https://ollama.com) install if you'd rather run fully offline)
+- A PostgreSQL database with the `pgvector` extension available (a free [Neon](https://neon.tech) project works well, or run Postgres locally)
+- A [Vercel Blob](https://vercel.com/docs/storage/vercel-blob) store linked to your project
+- A [Google Gemini API key](https://aistudio.google.com/apikey) (or a local [Ollama](https://ollama.com) install)
 
 ### Setup
 
@@ -155,34 +159,15 @@ FULL_CONTEXT_TOKEN_THRESHOLD_GEMINI="800000"
    ```
    The app will be available at `http://localhost:3000`.
 
-### Running with Docker (optional)
-
-A `Dockerfile` and `docker-compose.yml` are included for containerized local development:
-
-```bash
-docker compose up --build
-```
-
-If running Ollama natively on the host machine (rather than as a container), set `OLLAMA_BASE_URL="http://host.docker.internal:11434"` so the containerized app can reach it.
-
----
-
-## Known Limitations
-
-- The Gemini free tier has daily/per-minute request limits; heavy testing may require enabling billing on the associated Google Cloud project for uninterrupted use.
-
 ---
 
 ## Deployment
 
-The production app is deployed on [Railway](https://railway.app), using:
-- **Database:** [Neon](https://neon.tech) (managed Postgres with `pgvector` support)
-- **LLM:** Google Gemini API
+The production app is now deployed on [Vercel](https://vercel.com).
 
 To deploy your own instance:
 1. Push the repo to GitHub.
-2. Create a new Railway project from the GitHub repo — Railway will build from the included `Dockerfile` automatically.
-3. Add all environment variables listed above in Railway's Variables tab.
-4. Add a Persistent Volume in Railway: under the service's Settings → Volumes, add a volume and mount it at `/data/uploads`. Then, in the Variables tab, set `UPLOADS_DIR=/data/uploads`. If you don't do this, all uploaded PDFs will be lost every time the app redeploys!
-5. Generate a public domain under Settings → Networking, then set `NEXTAUTH_URL` to that domain and redeploy.
-6. Add the deployed domain to your Google OAuth client's Authorized JavaScript origins and Authorized redirect URIs (`https://your-domain/api/auth/callback/google`).
+2. Import the project in your Vercel Dashboard.
+3. Link a Vercel Postgres/Neon database and a **Vercel Blob** store under the Storage tab.
+4. Add all environment variables listed above in Vercel's Environment Variables settings.
+5. Deploy.

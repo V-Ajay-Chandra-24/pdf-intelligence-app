@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { deleteFile, deriveBlobPathname } from "@/lib/storage";
 
 export async function DELETE(
   req: Request,
@@ -32,6 +33,13 @@ export async function DELETE(
     await prisma.document.delete({
       where: { id },
     });
+
+    // Delete blob best-effort
+    if (document.fileUrl && document.fileUrl.startsWith("/uploads/")) {
+      const uuid = document.fileUrl.replace("/uploads/", "").replace(".pdf", "");
+      const blobPathname = deriveBlobPathname(document.userId, uuid);
+      await deleteFile(blobPathname);
+    }
 
     return NextResponse.json({ message: "Document deleted successfully" }, { status: 200 });
   } catch (error) {
