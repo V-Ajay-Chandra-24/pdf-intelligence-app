@@ -117,12 +117,16 @@ export default function UploadModal({ isOpen, onClose, onUploadComplete }: Uploa
         onUploadComplete(data.document);
       }, 1000); // Wait 1s to show success state before closing
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       abortControllerRef.current = null;
-      if (err.name === "AbortError") {
-        setError("Upload cancelled by user.");
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Upload cancelled by user.");
+        } else {
+          setError(err.message || "Something went wrong during upload");
+        }
       } else {
-        setError(err.message || "Something went wrong during upload");
+        setError("Something went wrong during upload");
       }
       setStage("IDLE");
     }

@@ -37,9 +37,6 @@ export async function POST(request: Request) {
           addRandomSuffix: false,
         };
       },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // Not used, as client will call our own API
-      },
     });
 
     return NextResponse.json(jsonResponse);

@@ -60,7 +60,7 @@ export async function GET(
       return new NextResponse("File not found", { status: 404 });
     }
     
-    return new NextResponse(result.stream as any, {
+    return new NextResponse(result.stream as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
