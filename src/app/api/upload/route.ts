@@ -49,19 +49,28 @@ export async function POST(req: Request) {
     blobPathname = deriveBlobPathname(session.user.id, uuid);
 
     // Download blob to check size, magic bytes and extract text
-    const result = await getPdfStream(blobPathname) as any;
+    const result = await getPdfStream(blobPathname, { useCache: false });
     if (!result) {
       return Response.json({ message: "File not found in blob storage." }, { status: 400 });
     }
 
-    const blobSize = result.blob?.size ?? result.size;
-    if (blobSize && blobSize > 10 * 1024 * 1024) {
+    const blobSize = result.blob.size;
+    if (blobSize !== null && blobSize > 10 * 1024 * 1024) {
       await deleteFile(blobPathname);
       return Response.json({ message: "File exceeds 10MB limit." }, { status: 400 });
     }
 
+    if (!result.stream) {
+      return Response.json({ message: "File stream not available." }, { status: 400 });
+    }
+
     const arrayBuffer = await new Response(result.stream).arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      await deleteFile(blobPathname);
+      return Response.json({ message: "File exceeds 10MB limit." }, { status: 400 });
+    }
 
     // Verify magic bytes %PDF-
     if (buffer.length < 5 || buffer.toString("utf8", 0, 5) !== "%PDF-") {
@@ -131,8 +140,6 @@ export async function POST(req: Request) {
     if (!sanitizedFilename) {
       sanitizedFilename = "document.pdf";
     }
-
-    const fileUrl = `/uploads/${uuid}.pdf`;
 
     // Database Persistence
     const document = await prisma.document.create({

@@ -6,7 +6,12 @@ import prisma from "@/lib/prisma";
 import { validateBlobPathname } from "@/lib/storage";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as HandleUploadBody;
+  let body: HandleUploadBody;
+  try {
+    body = (await request.json()) as HandleUploadBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
 
   try {
     const jsonResponse = await handleUpload({

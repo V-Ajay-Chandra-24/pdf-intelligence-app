@@ -18,9 +18,9 @@ export function validateBlobPathname(pathname: string, expectedUserId: string): 
   return { valid: true, uuid };
 }
 
-export async function getPdfStream(pathname: string) {
+export async function getPdfStream(pathname: string, options?: { useCache?: boolean }) {
   try {
-    const result = await get(pathname, { access: 'private' });
+    const result = await get(pathname, { access: 'private', ...options });
     return result;
   } catch (err: unknown) {
     console.error("Error fetching blob", pathname, err);
