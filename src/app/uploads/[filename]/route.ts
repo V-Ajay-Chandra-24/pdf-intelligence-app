@@ -60,11 +60,15 @@ export async function GET(
       return new NextResponse("File not found", { status: 404 });
     }
     
+    const name = authorizedDocument.filename;
+    const ascii = name.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_") || "document.pdf";
+    const encoded = encodeURIComponent(name).replace(/['()*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+
     return new NextResponse(result.stream as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${authorizedDocument.filename}"`,
+        "Content-Disposition": `inline; filename="${ascii}"; filename*=UTF-8''${encoded}`,
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
       },

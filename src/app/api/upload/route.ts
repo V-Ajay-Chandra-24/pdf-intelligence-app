@@ -10,36 +10,54 @@ export const maxDuration = 300;
 
 export async function POST(req: Request) {
   let blobPathname = "";
+  let created = false;
   try {
     const session = await getServerSession(authOptions);
     if (!session || !session.user?.id) {
       return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const { uuid, originalName, size } = await req.json();
+    let payload;
+    try {
+      payload = await req.json();
+    } catch {
+      return Response.json({ message: "Invalid JSON" }, { status: 400 });
+    }
 
-    if (!uuid || !originalName || size === undefined) {
+    const { uuid, originalName } = payload;
+
+    if (!uuid || typeof originalName !== "string") {
       return Response.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // Validate UUID format again just in case
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
     if (!uuidRegex.test(uuid)) {
       return Response.json({ message: "Invalid UUID" }, { status: 400 });
     }
 
-    blobPathname = deriveBlobPathname(session.user.id, uuid);
+    const fileUrl = `/uploads/${uuid}.pdf`;
 
-    if (size > 20 * 1024 * 1024) {
-      await deleteFile(blobPathname);
-      return Response.json({ message: "File exceeds 20MB limit." }, { status: 400 });
+    // Check if document already exists
+    const existingDocument = await prisma.document.findFirst({
+      where: { userId: session.user.id, fileUrl }
+    });
+    if (existingDocument) {
+      return Response.json({ message: "Upload successful", document: existingDocument }, { status: 200 });
     }
 
-    // Download blob to check magic bytes and extract text
-    const result = await getPdfStream(blobPathname);
-    if (!result || !result.stream) {
-      await deleteFile(blobPathname);
+    blobPathname = deriveBlobPathname(session.user.id, uuid);
+
+    // Download blob to check size, magic bytes and extract text
+    const result = await getPdfStream(blobPathname) as any;
+    if (!result) {
       return Response.json({ message: "File not found in blob storage." }, { status: 400 });
+    }
+
+    const blobSize = result.blob?.size ?? result.size;
+    if (blobSize && blobSize > 10 * 1024 * 1024) {
+      await deleteFile(blobPathname);
+      return Response.json({ message: "File exceeds 10MB limit." }, { status: 400 });
     }
 
     const arrayBuffer = await new Response(result.stream).arrayBuffer();
@@ -126,16 +144,25 @@ export async function POST(req: Request) {
         isScannedOcr: false,
       },
     });
+    created = true;
 
     after(async () => {
-      await summarizeDocumentJob(document.id, document.extractedText || "");
+      try {
+        await summarizeDocumentJob(document.id, document.extractedText || "");
+      } catch (err) {
+        console.error("Error in summarize job after()", err);
+        await prisma.document.update({
+          where: { id: document.id },
+          data: { summaryStatus: "FAILED" },
+        }).catch(() => {});
+      }
     });
 
     return Response.json({ message: "Upload and extraction successful", document }, { status: 200 });
 
   } catch (error) {
     console.error("Upload handler error:", error);
-    if (blobPathname) {
+    if (blobPathname && !created) {
       await deleteFile(blobPathname);
     }
     return Response.json({ message: "Something went wrong during upload" }, { status: 500 });
